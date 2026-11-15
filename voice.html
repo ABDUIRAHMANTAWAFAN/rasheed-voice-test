@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>الأوامر الصوتية - مركز الراشدين</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:22px;background:#f3f6fa;color:#172b43;font-family:Arial,Tahoma,sans-serif}
+.card{max-width:520px;margin:20px auto;background:#fff;border-radius:18px;padding:24px;box-shadow:0 8px 28px #142b4418;text-align:center}
+h2{margin:0 0 12px;color:#173b5e}
+p{line-height:1.8;color:#536273}
+button{border:0;border-radius:12px;padding:14px 20px;margin:8px;font-size:17px;font-weight:bold;cursor:pointer}
+#start{background:#173b5e;color:#fff}
+#send{background:#16734a;color:#fff}
+#cancel{background:#e9edf2;color:#26384b}
+#status{margin:18px 0;padding:14px;border-radius:12px;background:#eef4fa;min-height:52px;line-height:1.7}
+textarea{width:100%;min-height:110px;border:1px solid #cbd5e1;border-radius:12px;padding:12px;font-size:18px;direction:rtl}
+.small{font-size:13px;color:#6b7280}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>🎙️ الأوامر الصوتية</h2>
+  <p>اضغط بدء التسجيل، ثم تحدث بوضوح. بعد ظهور النص اضغط «إرسال الأمر إلى المركز».</p>
+  <button id="start">🎙️ ابدأ التسجيل</button>
+  <div id="status">جاهز. اضغط زر بدء التسجيل.</div>
+  <textarea id="transcript" placeholder="سيظهر الأمر الذي التقطه الميكروفون هنا..."></textarea>
+  <div>
+    <button id="send">إرسال الأمر إلى المركز</button>
+    <button id="cancel">إغلاق</button>
+  </div>
+  <p class="small">تحتاج هذه الصفحة إلى اتصال بالإنترنت ومتصفح يدعم التعرف الصوتي.</p>
+</div>
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const parentOrigin = params.get("parentOrigin") || "";
+  const status = document.getElementById("status");
+  const transcript = document.getElementById("transcript");
+  const startBtn = document.getElementById("start");
+  let recognition = null;
+  let finalText = "";
+
+  function show(message){ status.textContent = message; }
+
+  function stop(){
+    if(recognition){
+      try { recognition.onresult=null; recognition.onerror=null; recognition.onend=null; recognition.stop(); } catch(e){}
+      recognition=null;
+    }
+  }
+
+  startBtn.addEventListener("click", function(){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){
+      show("هذا المتصفح لا يدعم التعرف الصوتي. افتح الصفحة في Google Chrome.");
+      return;
+    }
+
+    stop();
+    finalText = "";
+    transcript.value = "";
+    show("⏳ جارٍ تشغيل الميكروفون...");
+
+    try{
+      recognition = new SR();
+      recognition.lang = "ar-IQ";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 5;
+
+      recognition.onstart = function(){ show("🎙️ أستمع إليك الآن... تحدث بالأمر."); };
+      recognition.onresult = function(event){
+        let interim = "";
+        for(let i=event.resultIndex || 0; i<event.results.length; i++){
+          const text = event.results[i][0] && event.results[i][0].transcript || "";
+          if(event.results[i].isFinal) finalText += text + " ";
+          else interim += text + " ";
+        }
+        transcript.value = (finalText + interim).trim();
+        if(transcript.value) show("تم التقاط الكلام. يمكنك إكماله أو إرسال النص إلى المركز.");
+      };
+      recognition.onerror = function(event){
+        const map = {
+          "not-allowed":"إذن الميكروفون مرفوض. اضغط رمز القفل بجانب عنوان الصفحة واجعل الميكروفون «سماح».",
+          "service-not-allowed":"خدمة التعرف الصوتي محظورة في المتصفح.",
+          "audio-capture":"لم يتم العثور على ميكروفون. تحقق من إعدادات الجهاز.",
+          "no-speech":"لم نسمع كلاماً. أعد المحاولة وتحدث بعد ظهور «أستمع إليك الآن».",
+          "network":"تعذر الاتصال بخدمة التعرف الصوتي. تحقق من الإنترنت.",
+          "language-not-supported":"اللهجة العراقية غير مدعومة على هذا الجهاز. جرّب تغيير لغة recognition.lang إلى ar-SA في هذا الملف."
+        };
+        show("⚠️ " + (map[event.error] || ("خطأ صوتي: " + event.error)));
+      };
+      recognition.onend = function(){
+        recognition = null;
+        if(transcript.value.trim()) show("✔ انتهى التسجيل. راجع النص ثم اضغط إرسال الأمر إلى المركز.");
+        else if(!status.textContent.startsWith("⚠️")) show("انتهى التسجيل دون التقاط كلام. أعد المحاولة.");
+      };
+      recognition.start();
+    }catch(e){
+      recognition=null;
+      show("تعذر بدء التسجيل: " + (e.message || e));
+    }
+  });
+
+  document.getElementById("send").addEventListener("click", function(){
+    const text = transcript.value.trim();
+    if(!text){ show("لا يوجد نص لإرساله. ابدأ التسجيل أولاً."); return; }
+    if(!window.opener || window.opener.closed){
+      show("لم أجد نافذة المركز مفتوحة. افتح هذه الصفحة من زر الصوت داخل المركز.");
+      return;
+    }
+    if(!parentOrigin){
+      show("عنوان نافذة المركز غير متوفر. أغلق الصفحة وافتحها من زر الصوت داخل المركز.");
+      return;
+    }
+    window.opener.postMessage({type:"RA_VOICE_COMMAND", text:text}, parentOrigin);
+    show("✔ تم إرسال الأمر إلى المركز.");
+    setTimeout(function(){ window.close(); }, 500);
+  });
+
+  document.getElementById("cancel").addEventListener("click", function(){
+    stop();
+    window.close();
+  });
+
+  window.addEventListener("message", function(event){
+    if(event.data && event.data.type === "RA_VOICE_STOP") stop();
+  });
+
+  if(!parentOrigin) show("⚠️ افتح هذه الصفحة من زر التحدث داخل منظومة مركز الراشدين.");
+})();
+</script>
+</body>
+</html>
